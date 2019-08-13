@@ -1,0 +1,75 @@
+---
+title: "EITC의 고용 증가 효과"
+author: DANBI
+date: 2019-08-13
+assets:
+  css:
+    - "https://fonts.googleapis.com/css?family=Nanum+Gothic"
+    - "http://fonts.googleapis.com/css?family=Oxygen"
+    - "http://fonts.googleapis.com/css?family=Fira+Code"
+    - style4anrinsk.css
+
+output:
+  rmarkdown::html_document:
+    theme: readable
+    highlight: zenburn 
+    includes: 
+      before_body: header.html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  cache = TRUE, 
+  message = FALSE, 
+  warning = FALSE,
+  fig.showtext=TRUE
+)
+```
+
+근로장려세제(EITC; Earned Income Tax Credit)란 소득 기준으로 특정 계층 이하에 대해서 일을 했을 경우 소득에 부과되는 세금을 돌려주는 제도다. 일종의 노동 장려책으로 실제로 일을 한 사람에게 인센티브를 준다는 점에서 선호되는 제도이기도 하다. 그런데, EITC의 자격 조건 중에서 자녀 유무가 존재하는 경우가 많다. 자녀가 있는 경우는 소득 보조가 더욱 절실하다는 철학의 반영일 것이다. 미혼 여성 노동자의 경우 EITC가 노동 공급을 늘이게 될까? 
+
+EITC를 무작위 할당으로 주는 실험이 불가능하다면, 차선책으로 DID(Difference in Differences)를 쓸 수 있겠다. 이 경우 EITC의 조건이 되는 자녀 유무에 따라서 처치 집단과 통제 집단을 나눌 수 있고, ETIC가 실행되기 전과 후를 살펴봄으로써 DID 추정치를 구할 수 있다. [데이터](https://dhicks.github.io/2018-10-10-did)는 관련 연구 논문에 기반하여 가상의 ETIC 자료를 임의로 생성한 것이다. 
+
+<style type="text/css"> 
+code, pre { 
+    font-family: Fira Code, Iosevka, Hack, monospace; 
+} 
+</style>
+
+```{r,  results = 'asis'}
+Sys.setlocale("LC_CTYPE", "Chinese")
+
+library(haven)
+library(skimr)
+library(tidyverse)
+
+data = haven::read_dta('data/eitc.dta')
+skim(data, work, year, children) %>% 
+  skimr::kable(digits = 0) 
+```
+
+`skimr`은 데이터의 특징을 간편하게 요약해주는 패키지다. children은 자녀의 숫자, work는 취업 여부를 타나낸다. 그리고 연도 자료가 있다. 우리의 자료에서 EITC가 시행된 연도는 94년부터다. 따라서 자료를 93년 이후와 이전으로 나눌 필요가 있다. 자녀의 유무만 관심이 있으므로 이 역시 더미 변수로 처리해주도록 하자. 
+
+```{r}
+data <- 
+  data %>%
+  mutate(post93 = year >= 1994, 
+         anykids = children >= 1)
+```
+
+우리가 추정할 회귀식은 간단하다. 
+
+$$
+\text{work} = \beta_0 + \beta_1 \text{post93} + \beta_2 \text{anykids} + \delta \text{(anykids} \times \text{post93)} + \varepsilon
+$$
+
+여기서 DID 추정치는 $\delta$다. 회귀분석에서 더미 변수의 역할을 생각해보자. 더미 변수의 계수란 해당 변수의 속성을 지닌 개체와 그렇지 않은 개체를 모은 후 이 둘의 평균의 차이를 나타낸다. 위 회귀식에서 보면 post93의 계수 $\beta_1$ EITC가 시작되기 전과 후의 차이를 나타낸다. 한편, $\beta_2$는 자녀 유무의 차이를 나타낸다. 그리고 $\delta$는 둘의 더미 곱이므로 자녀가 있고 94년부터 ETIC의 대상이 되는 집단을 나타낸다. 도출을 위한 엄밀한 계산을 거치지는 않겠지만, 위의 회귀 분석이 중회귀 분석이므로 $\delta$는 횡단면과 시계열의 차이를 모두 고려한 DID 추정량이 된다. 이 분석을 R에서 간단하게 수행할 수 있다. 
+
+```{r}
+model = lm(work ~ anykids*post93, data = data)
+summary(model)
+```
+
+마지막 계수는 통계적으로 충분히 유의미하다. 계수의 크기는 0.469 정도다. 즉, EITC로 인한 미혼 여성의 고용이 증가한 효과는 약 4.7% 정도로 추정할 수 있겠다. 
+
